@@ -7,7 +7,7 @@ replicaCount:
 image:
   backend:
     repository: ghcr.io/lucchmielowski/diiage-finals/backend
-    tag: "6471f918325879257b3f1983a63a83fda534c99b"
+    tag: "latest"
     pullPolicy: Always
 
 service:

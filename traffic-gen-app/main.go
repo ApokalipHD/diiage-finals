@@ -2,45 +2,62 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 )
 
 func main() {
+	// Setup structured logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting traffic generator")
+
 	backendURL := os.Getenv("BACKEND_URL")
 	if backendURL == "" {
 		backendURL = "http://backend-prod:80"
+		slog.Warn("BACKEND_URL not set, using default", "backend_url", backendURL)
 	}
 
 	intervalStr := os.Getenv("INTERVAL")
 	if intervalStr == "" {
 		intervalStr = "5s"
+		slog.Info("INTERVAL not set, using default", "interval", intervalStr)
 	}
 
 	interval, err := time.ParseDuration(intervalStr)
 	if err != nil {
-		log.Fatalf("Invalid INTERVAL format: %v", err)
+		slog.Error("Invalid INTERVAL format", "interval", intervalStr, "error", err)
+		os.Exit(1)
 	}
 
 	endpoints := []string{
+		"/",
+		"/health",
 		"/config",
 		"/pods",
+		"/metrics",
 	}
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	log.Printf("Traffic generator started")
-	log.Printf("Backend URL: %s", backendURL)
-	log.Printf("Interval: %s", interval)
-	log.Printf("Endpoints: %v", endpoints)
+	slog.Info("Traffic generator configured",
+		"backend_url", backendURL,
+		"interval", interval,
+		"endpoints", endpoints,
+		"timeout", client.Timeout,
+	)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	slog.Info("Starting traffic generation loop")
 	// Initial request
 	makeRequests(client, backendURL, endpoints)
 
@@ -53,12 +70,14 @@ func makeRequests(client *http.Client, baseURL string, endpoints []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	slog.Debug("Starting request cycle", "endpoint_count", len(endpoints))
+
 	for _, endpoint := range endpoints {
 		url := baseURL + endpoint
 
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			log.Printf("Error creating request for %s: %v", url, err)
+			slog.Error("Failed to create request", "url", url, "error", err)
 			continue
 		}
 
@@ -67,11 +86,30 @@ func makeRequests(client *http.Client, baseURL string, endpoints []string) {
 		duration := time.Since(start)
 
 		if err != nil {
-			log.Printf("Error calling %s: %v (duration: %v)", url, err, duration)
+			slog.Warn("Request failed",
+				"url", url,
+				"error", err,
+				"duration_ms", duration.Milliseconds(),
+			)
 			continue
 		}
 		defer resp.Body.Close()
 
-		log.Printf("GET %s -> %d (duration: %v)", url, resp.StatusCode, duration)
+		slog.Info("Request completed",
+			"method", req.Method,
+			"url", url,
+			"status_code", resp.StatusCode,
+			"duration_ms", duration.Milliseconds(),
+		)
+
+		if resp.StatusCode >= 400 {
+			slog.Warn("Request returned error status",
+				"url", url,
+				"status_code", resp.StatusCode,
+				"duration_ms", duration.Milliseconds(),
+			)
+		}
 	}
+
+	slog.Debug("Request cycle completed", "endpoint_count", len(endpoints))
 }

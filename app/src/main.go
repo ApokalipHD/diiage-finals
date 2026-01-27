@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -35,31 +35,48 @@ var (
 )
 
 func main() {
+	// Setup structured logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting backend application")
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatalf("Failed to get in-cluster config: %v", err)
+		slog.Error("Failed to get in-cluster config", "error", err)
+		os.Exit(1)
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Failed to create Kubernetes client: %v", err)
+		slog.Error("Failed to create Kubernetes client", "error", err)
+		os.Exit(1)
 	}
 
 	namespace := os.Getenv("POD_NAMESPACE")
 	if namespace == "" {
 		namespace = "default"
+		slog.Warn("POD_NAMESPACE not set, using default namespace")
 	}
 
+	slog.Info("Kubernetes client initialized", "namespace", namespace)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Handling request", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		httpRequestsTotal.WithLabelValues("/", "200").Inc()
 		w.Write([]byte(fmt.Sprintf("Backend running in namespace: %s\n", namespace)))
+		slog.Debug("Request completed", "path", r.URL.Path, "status", 200)
 	})
 
 	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Handling config request", "method", r.Method, "path", r.URL.Path)
 		ctx := context.Background()
 
 		cm, err := clientset.CoreV1().ConfigMaps(namespace).Get(ctx, "app-config", metav1.GetOptions{})
 		if err != nil {
+			slog.Error("Failed to read ConfigMap", "namespace", namespace, "configmap", "app-config", "error", err)
 			httpRequestsTotal.WithLabelValues("/config", "500").Inc()
 			http.Error(w, fmt.Sprintf("Failed to read ConfigMap: %v", err), http.StatusInternalServerError)
 			return
@@ -67,28 +84,37 @@ func main() {
 
 		configmapReadTotal.Inc()
 		httpRequestsTotal.WithLabelValues("/config", "200").Inc()
+		slog.Info("ConfigMap read successfully", "namespace", namespace, "configmap", "app-config", "keys", len(cm.Data))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(cm.Data)
+		if err := json.NewEncoder(w).Encode(cm.Data); err != nil {
+			slog.Error("Failed to encode ConfigMap data", "error", err)
+		}
 	})
 
 	http.HandleFunc("/pods", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Handling pods request", "method", r.Method, "path", r.URL.Path)
 		ctx := context.Background()
 
 		pods, err := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 		if err != nil {
+			slog.Error("Failed to list pods", "error", err)
 			httpRequestsTotal.WithLabelValues("/pods", "500").Inc()
 			http.Error(w, fmt.Sprintf("Failed to list pods: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		httpRequestsTotal.WithLabelValues("/pods", "200").Inc()
+		slog.Info("Pods listed successfully", "count", len(pods.Items))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(pods.Items)
+		if err := json.NewEncoder(w).Encode(pods.Items); err != nil {
+			slog.Error("Failed to encode pods list", "error", err)
+		}
 	})
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("Health check request", "path", r.URL.Path)
 		httpRequestsTotal.WithLabelValues("/health", "200").Inc()
 		w.Write([]byte("OK"))
 	})
@@ -98,8 +124,12 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+		slog.Info("PORT not set, using default port", "port", port)
 	}
 
-	log.Printf("Backend listenning to port: %s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	slog.Info("Starting HTTP server", "port", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		slog.Error("HTTP server failed", "error", err)
+		os.Exit(1)
+	}
 }
