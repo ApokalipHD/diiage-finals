@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: demo-applications
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - app: backend
+        path: app/chart
+        env: prod
+        namespace: prod
+        valuesFile: gitops/environments/values/backend-prod.yaml
+        autoSync: "true"
+  template:
+    metadata:
+      name: '{{app}}-{{env}}'
+      labels:
+        app: '{{app}}'
+        environment: '{{env}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/lucchmielowski/diiage-finals.git
+        targetRevision: main
+        path: '{{path}}'
+        helm:
+          valueFiles:
+          - 'https://raw.githubusercontent.com/lucchmielowski/diiage-finals/refs/heads/main/{{valuesFile}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+      syncPolicy:
+        syncOptions:
+        - CreateNamespace=true
+
