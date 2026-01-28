@@ -2,28 +2,25 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: backend-sa
-  namespace: backend-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: backend-reader
-  namespace: backend-system
 rules:
 - apiGroups: [""]
   resources: ["pods", "configmaps"]
   verbs: ["get", "watch", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: backend-reader-binding
-  namespace: backend-system
 subjects:
 - kind: ServiceAccount
   name: backend-sa
-  namespace: backend-system
+  namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: backend-reader
   apiGroup: rbac.authorization.k8s.io
