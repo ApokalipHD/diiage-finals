@@ -11,6 +11,10 @@ spec:
       app: {{ include "diiage-finals-app.name" . }}-backend
   template:
     metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-go: "monitoring/go-instrumentation"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
       labels:
         app: {{ include "diiage-finals-app.name" . }}-backend
         {{- include "diiage-finals-app.labels" . | nindent 8 }}

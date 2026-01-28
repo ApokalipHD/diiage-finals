@@ -1,0 +1,22 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: go-instrumentation
+  namespace: monitoring # Important : l'Instrumentation et le Collector doivent être ici
+spec:
+  exporter:
+    # On pointe vers le service gRPC de ton collecteur
+    endpoint: http://monitoring-collector-collector.monitoring.svc.cluster.local:4317
+  propagators:
+    - tracecontext
+    - baggage
+  go:
+    # Utilise l'image définie dans tes values
+    image: ghcr.io/open-telemetry/opentelemetry-go-instrumentation/autoinstrumentation-go:v0.23.0
+    env:
+      - name: OTEL_GO_AUTO_TARGET_EXE
+        value: "/root/backend"
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "grpc"
+      - name: OTEL_METRICS_EXPORTER
+        value: "otlp"
