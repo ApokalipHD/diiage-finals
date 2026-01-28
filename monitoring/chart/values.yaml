@@ -30,8 +30,8 @@ opentelemetryCollector:
       cpu: 100m
       memory: 256Mi
   exporters:
-    tempoEndpoint: tempo.monitoring.svc.cluster.local:4317
-    prometheusEndpoint: http://prometheus-server.monitoring.svc.cluster.local:80/api/v1/write
+    tempoEndpoint: monitoring-stack-tempo.monitoring.svc.cluster.local:4317
+    prometheusEndpoint: http://monitoring-stack-prometheus-server.monitoring.svc.cluster.local:80/api/v1/write 
 
 # Prometheus configuration
 prometheus:
