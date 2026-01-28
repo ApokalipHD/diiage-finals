@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ApokalipHD/diiage-finals.git
-    targetRevision: dev
+    targetRevision: HEAD
     path: gitops/apps_definition
 
   destination:
